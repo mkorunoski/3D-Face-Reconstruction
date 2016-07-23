@@ -14,7 +14,7 @@
 #include <opencv2\imgproc.hpp>
 
 // ==================================================
-// FACE LANDMARK DETECTION INCLUDES
+// DLIB INCLUDES
 // ==================================================
 #include <dlib\opencv\cv_image.h>
 #include <dlib\image_processing\frontal_face_detector.h>
@@ -35,51 +35,71 @@
 
 #include "OBJLoader.h"
 
-const char* TITLE = "3D Face Reconstruction";
-const int	WIDTH = 800;
+const char* TITLE  = "3D Face Reconstruction";
+const int	WIDTH  = 800;
 const int	HEIGHT = 600;
 
 const GLchar* VERTEX_SHADER_SOURCE[] = {
-	"#version 330 core								\n"
-	"												\n"
-	"layout(location = 0) in vec3 position;			\n"
-	"												\n"
-	"uniform mat4 M;								\n"
-	"uniform mat4 VP;								\n"
-	"												\n"
-	"out vec4 color;								\n"
-	"												\n"
-	"void main()									\n"
-	"{												\n"
-	"	color = clamp(M * vec4(position, 1), 0, 1);	\n"
-	"	gl_Position = VP * M * vec4(position, 1);	\n"
-	"}												\n"
+	"#version 330 core										\n"
+	"														\n"
+	"layout(location = 0) in vec3 position;					\n"
+	"														\n"
+	"uniform mat4 M;										\n"
+	"uniform mat4 VP;										\n"
+	"														\n"
+	"out vec4 color;										\n"
+	"														\n"
+	"void main()											\n"
+	"{														\n"
+	"	color = clamp(M * (0.1 + vec4(position, 1)), 0, 1);	\n"
+	"	gl_Position = VP * M * vec4(position, 1);			\n"
+	"}														\n"
 };
 const GLchar* FRAGMENT_SHADER_SOURCE[] = {
-	"#version 330 core								\n"
-	"												\n"
-	"in vec4 color;									\n"
-	"												\n"
-	"out vec4 fragColor;							\n"
-	"												\n"
-	"void main()									\n"
-	"{												\n"
-	"	fragColor = color;							\n"
-	"}												\n"
+	"#version 330 core										\n"
+	"														\n"
+	"in vec4 color;											\n"
+	"														\n"
+	"out vec4 fragColor;									\n"
+	"														\n"
+	"void main()											\n"
+	"{														\n"
+	"	fragColor = color;									\n"
+	"}														\n"
 };
 
 // ?
 /*
-levo oko nadvor		37 - 1 (4.65754, 3.71519, -0.01428)
-levo oko vnatre		40 - 1 (1.97604, 3.42160, 0.23674)
-desno oko nadvor	46 - 1 (-4.65754, 3.71519, -0.01428)
-ddesno oko vnatre	43 - 1 (-1.97604, 3.42160, 0.23674)
-nos levo			32 - 1 (1.84389, -0.29071, 1.91656)
-nos desno			36 - 1 (-1.84389, -0.29071, 1.91656)
-usta levo			49 - 1 (2.61255, -3.36301, 1.04384)
-usta desno			55 - 1 (-2.61255, -3.36301, 1.04384)
-brada				 9 - 1 (0, -7.02612, 1.70428)
+Лево око надвор		37 - 1 (+4.65754, +3.71519, -0.01428)
+Лево око внатре		40 - 1 (+1.97604, +3.42160, +0.23674)
+Десно око надвор	46 - 1 (-4.65754, +3.71519, -0.01428)
+Десно око внатре	43 - 1 (-1.97604, +3.42160, +0.23674)
+Нос лево			32 - 1 (+1.84389, -0.29071, +1.91656)
+Нос десно			36 - 1 (-1.84389, -0.29071, +1.91656)
+Уста лево			49 - 1 (+2.61255, -3.36301, +1.04384)
+Уста десно			55 - 1 (-2.61255, -3.36301, +1.04384)
+Брада				 9 - 1 (+0.00000, -7.02612, +1.70428)
 */
+
+const cv::Point3f modelPointsArr[] =
+{
+	cv::Point3f(+4.65754f, +3.71519f, -0.01428f),
+	cv::Point3f(+1.97604f, +3.42160f, +0.23674f),
+	cv::Point3f(-4.65754f, +3.71519f, -0.01428f),
+	cv::Point3f(-1.97604f, +3.42160f, +0.23674f),
+	cv::Point3f(+1.84389f, -0.29071f, +1.91656f),
+	cv::Point3f(-1.84389f, -0.29071f, +1.91656f),
+	cv::Point3f(+2.61255f, -3.36301f, +1.04384f),
+	cv::Point3f(-2.61255f, -3.36301f, +1.04384f),
+	cv::Point3f(+0.00000f, -7.02612f, +1.70428f)
+};
+
+void getEulerAngles(
+	const std::vector<cv::Point2f>& srcImagePoints,
+	const std::vector<cv::Point3f>& modelPoints,
+	const cv::Mat& srcImage,
+	cv::Vec3d& eav
+	);
 
 // ==================================================
 //	MAIN
@@ -103,6 +123,8 @@ int main(int argc, char** argv)
 	glClearColor(0, 0, 0, 0);
 	glEnable(GL_DEPTH_TEST);
 
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+
 	GLuint vertexShader;
 	GLuint fragmentShader;
 	GLuint program;
@@ -116,7 +138,7 @@ int main(int argc, char** argv)
 	if (!success)
 	{
 		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR: Vertex shader compilation failed.\n" << infoLog << std::endl;
+		std::cerr << "ERROR: Vertex shader compilation failed.\n" << infoLog << std::endl;
 	}
 
 	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -126,7 +148,7 @@ int main(int argc, char** argv)
 	if (!success)
 	{
 		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-		std::cout << "ERROR: Fragment shader compilation failed.\n" << infoLog << std::endl;
+		std::cerr << "ERROR: Fragment shader compilation failed.\n" << infoLog << std::endl;
 	}
 
 	program = glCreateProgram();
@@ -136,7 +158,7 @@ int main(int argc, char** argv)
 	glGetProgramiv(program, GL_LINK_STATUS, &success);
 	if (!success) {
 		glGetProgramInfoLog(program, 512, NULL, infoLog);
-		std::cout << "ERROR: Program linking failed.\n" << infoLog << std::endl;
+		std::cerr << "ERROR: Program linking failed.\n" << infoLog << std::endl;
 	}
 
 	glDeleteShader(vertexShader);
@@ -168,123 +190,79 @@ int main(int argc, char** argv)
 
 	glBindVertexArray(0);
 
-	// ?
-	std::vector<cv::Point3f> modelPoints;	
-	modelPoints.push_back(cv::Point3f(+4.65754f, +3.71519f, -0.01428f));
-	modelPoints.push_back(cv::Point3f(+1.97604f, +3.42160f, +0.23674f));
-	modelPoints.push_back(cv::Point3f(-4.65754f, +3.71519f, -0.01428f));
-	modelPoints.push_back(cv::Point3f(-1.97604f, +3.42160f, +0.23674f));
-	modelPoints.push_back(cv::Point3f(+1.84389f, -0.29071f, +1.91656f));
-	modelPoints.push_back(cv::Point3f(-1.84389f, -0.29071f, +1.91656f));
-	modelPoints.push_back(cv::Point3f(+2.61255f, -3.36301f, +1.04384f));
-	modelPoints.push_back(cv::Point3f(-2.61255f, -3.36301f, +1.04384f));
-	modelPoints.push_back(cv::Point3f(+0.00000f, -7.02612f, +1.70428f));
+	glm::mat4 model;
+	glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+	const glm::mat4 projection = glm::perspective(70.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);
+	glm::mat4 viewProjection;
+	GLuint uMLocation = glGetUniformLocation(program, "M");
+	GLuint uVPLocation = glGetUniformLocation(program, "VP");	
 
-	cv::Mat cv_in = cv::imread("face.jpg", CV_LOAD_IMAGE_COLOR);
-	dlib::array2d<dlib::rgb_pixel> dlib_in;
-	dlib::assign_image(dlib_in, dlib::cv_image<dlib::bgr_pixel>(cv_in));
-
-	dlib::image_window win;
+	// ?	
+	std::vector<cv::Point3f> modelPoints(modelPointsArr, modelPointsArr + sizeof(modelPointsArr) / sizeof(modelPointsArr[0]));
 
 	dlib::frontal_face_detector detector = dlib::get_frontal_face_detector();
 	dlib::shape_predictor sp;
-	dlib::deserialize("shape_predictor_68_face_landmarks.dat") >> sp;		
-	std::vector<dlib::rectangle> dets = detector(dlib_in);
-	std::vector<dlib::full_object_detection> shapes;		
-	dlib::full_object_detection shape = sp(dlib_in, dets[0]);
+	dlib::deserialize("shape_predictor_68_face_landmarks.dat") >> sp;
 
-	// ?
-	std::vector<cv::Point2f> srcImagePoints;
-	int i;
-	i = 36; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 39; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 45; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 42; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 31; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 35; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 48; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 54; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	i = 8;	srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));						
-	shapes.push_back(shape);
-	//for (int i = 0; i < srcImagePoints.size(); ++i)
-	//{
-	//	cv::circle(cv_in, srcImagePoints.at(i), 5, cv::Scalar(0, 0, 1));
-	//}
-	//cv::imshow("Faces", cv_in);
-	
-	win.clear_overlay();
-	win.set_image(dlib_in);
-	win.add_overlay(dlib::render_face_detections(shapes));	
+	cv::Mat srcImageCV;
+	dlib::image_window win;
 
-	std::vector<double> rv(3), tv(3);
-	cv::Mat rvec(rv), tvec(tv);
-	cv::Vec3d eav;
-	
-	cv::Mat ip(srcImagePoints);
-	cv::Mat op = cv::Mat(modelPoints);
-	cv::Scalar m = mean(cv::Mat(modelPoints));
-
-	rvec = cv::Mat(rv);
-	double _d[9] =
+	cv::VideoCapture vc(0);
+	if (!vc.isOpened())
 	{
-		1,	0,  0,
-		0, -1,  0,
-		0,	0, -1
-	};
-	Rodrigues(cv::Mat(3, 3, CV_64FC1, _d), rvec);
-	tv[0] = 0; tv[1] = 0; tv[2] = 1;
-	tvec = cv::Mat(tv);
+		std::cerr << "ERROR: VideoCapture failed to initialize.\n" << std::endl;
+		return -1;
+	}
 
-	double max_d = MAX(cv_in.rows, cv_in.cols);
-	double _cm[9] =
-	{
-		max_d,	0,		(double)cv_in.cols / 2.0,
-		0,		max_d,	(double)cv_in.rows / 2.0,
-		0,		0,		1.0
-	};
-	cv::Mat camMatrix = cv::Mat(3, 3, CV_64FC1, _cm);
-
-	double _dc[] = { 0, 0, 0, 0 };
-	solvePnP(op, ip, camMatrix, cv::Mat(1, 4, CV_64FC1, _dc), rvec, tvec, false, CV_EPNP);
-
-	double rot[9] = { 0 };
-	cv::Mat rotM(3, 3, CV_64FC1, rot);
-	Rodrigues(rvec, rotM);
-	double* _r = rotM.ptr<double>();
-	printf("rotation mat: \n %.3f %.3f %.3f\n%.3f %.3f %.3f\n%.3f %.3f %.3f\n",
-		_r[0], _r[1], _r[2], _r[3], _r[4], _r[5], _r[6], _r[7], _r[8]);
-
-	printf("trans vec: \n %.3f %.3f %.3f\n", tv[0], tv[1], tv[2]);
-
-	double _pm[12] =
-	{
-		_r[0], _r[1], _r[2], tv[0],
-		_r[3], _r[4], _r[5], tv[1],
-		_r[6], _r[7], _r[8], tv[2]
-	};
-
-	cv::Mat tmp, tmp1, tmp2, tmp3, tmp4, tmp5;
-	cv::decomposeProjectionMatrix(cv::Mat(3, 4, CV_64FC1, _pm), tmp, tmp1, tmp2, tmp3, tmp4, tmp5, eav);
-	printf("Face Rotation Angle:  %.5f %.5f %.5f\n", eav[0], eav[1], eav[2]);
-	
-	// yaw   y
-	// pitch x
-	// roll  z
-	// ?
-	glm::mat4 model = glm::eulerAngleYXZ(eav[1], eav[0], eav[2]);
-	//
-	glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-	const glm::mat4 projection = glm::perspective(70.0f, (float)WIDTH / (float)HEIGHT, 0.1f, 1000.0f);	
-	const glm::mat4 viewProjection = projection * view;
-	GLuint uMLocation = glGetUniformLocation(program, "M");
-	GLuint uVPLocation = glGetUniformLocation(program, "VP");
-
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-
-	boolean run = true;	
+	dlib::array2d<dlib::rgb_pixel> srcImageDLIB;
+	std::vector<dlib::rectangle> dets;
+	std::vector<dlib::full_object_detection> shapes;
+	dlib::full_object_detection shape;
+	boolean run = true;
 	while (run)
 	{
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);		
+		vc.read(srcImageCV);		
+		
+		dlib::assign_image(srcImageDLIB, dlib::cv_image<dlib::bgr_pixel>(srcImageCV));
+
+		dets = detector(srcImageDLIB);		
+		shape = sp(srcImageDLIB, dets[0]);
+
+		// ?	
+		std::vector<cv::Point2f> srcImagePoints;
+		int i;
+		i = 36; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 39; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 45; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 42; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 31; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 35; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 48; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 54; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		i = 8;	srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
+		shapes.push_back(shape);
+		//for (int i = 0; i < srcImagePoints.size(); ++i)
+		//{
+		//	cv::circle(srcImageCV, srcImagePoints.at(i), 5, cv::Scalar(0, 0, 1));
+		//}
+		//cv::imshow("Faces", srcImageCV);
+
+		win.clear_overlay();
+		win.set_image(srcImageDLIB);
+		win.add_overlay(dlib::render_face_detections(shapes));
+
+		cv::Vec3d eav;
+		getEulerAngles(srcImagePoints, modelPoints, srcImageCV, eav);
+		//yaw   y
+		//pitch x
+		//roll  z
+		// ?
+		model = glm::eulerAngleYXZ(eav[1], eav[0], eav[2]);
+		//
+				
+		viewProjection = projection * view;			
+
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		SDL_Event e;
 		SDL_PollEvent(&e);
@@ -300,7 +278,7 @@ int main(int argc, char** argv)
 
 		SDL_GL_SwapWindow(window);
 	}
-
+		
 	glDeleteBuffers(1, &EBO);
 	glDeleteBuffers(1, &VBO);
 	glDeleteVertexArrays(1, &VAO);
@@ -310,4 +288,63 @@ int main(int argc, char** argv)
 	SDL_Quit();
 
 	return 0;
+}
+
+void getEulerAngles(
+	const std::vector<cv::Point2f>& srcImagePoints,
+	const std::vector<cv::Point3f>& modelPoints,
+	const cv::Mat& srcImage,
+	cv::Vec3d& eav
+	)
+{
+	std::vector<double> rv(3), tv(3);
+	cv::Mat rvec(rv), tvec(tv);
+	
+
+	cv::Mat ip(srcImagePoints);
+	cv::Mat op = cv::Mat(modelPoints);
+	cv::Scalar m = mean(cv::Mat(modelPoints));
+
+	rvec = cv::Mat(rv);
+	double _d[9] =
+	{
+		1, 0, 0,
+		0, -1, 0,
+		0, 0, -1
+	};
+	Rodrigues(cv::Mat(3, 3, CV_64FC1, _d), rvec);
+	tv[0] = 0; tv[1] = 0; tv[2] = 1;
+	tvec = cv::Mat(tv);
+
+	double max_d = MAX(srcImage.rows, srcImage.cols);
+	double _cm[9] =
+	{
+		max_d, 0, (double)srcImage.cols / 2.0,
+		0, max_d, (double)srcImage.rows / 2.0,
+		0, 0, 1.0
+	};
+	cv::Mat camMatrix = cv::Mat(3, 3, CV_64FC1, _cm);
+
+	double _dc[] = { 0, 0, 0, 0 };
+	solvePnP(op, ip, camMatrix, cv::Mat(1, 4, CV_64FC1, _dc), rvec, tvec, false, CV_EPNP);
+
+	double rot[9] = { 0 };
+	cv::Mat rotM(3, 3, CV_64FC1, rot);
+	Rodrigues(rvec, rotM);
+	double* _r = rotM.ptr<double>();
+	//printf("rotation mat: \n %.3f %.3f %.3f\n%.3f %.3f %.3f\n%.3f %.3f %.3f\n",
+	// 	_r[0], _r[1], _r[2], _r[3], _r[4], _r[5], _r[6], _r[7], _r[8]);
+
+	//printf("trans vec: \n %.3f %.3f %.3f\n", tv[0], tv[1], tv[2]);
+
+	double _pm[12] =
+	{
+		_r[0], _r[1], _r[2], tv[0],
+		_r[3], _r[4], _r[5], tv[1],
+		_r[6], _r[7], _r[8], tv[2]
+	};
+
+	cv::Mat tmp, tmp1, tmp2, tmp3, tmp4, tmp5;
+	cv::decomposeProjectionMatrix(cv::Mat(3, 4, CV_64FC1, _pm), tmp, tmp1, tmp2, tmp3, tmp4, tmp5, eav);
+	//printf("Face Rotation Angle:  %.5f %.5f %.5f\n", eav[0], eav[1], eav[2]);
 }
