@@ -37,11 +37,6 @@
 
 #include "OBJLoader.h"
 
-// ==================================================
-// POSE ESTIMATION INCLUDES
-// ==================================================
-#include "RPP.h"
-
 const char* TITLE  = "3D Face Reconstruction";
 const int	WIDTH  = 600;
 const int	HEIGHT = 600;
@@ -74,7 +69,7 @@ const GLchar* VERTEX_SHADER_SOURCE[] = {
 };
 const GLchar* FRAGMENT_SHADER_SOURCE[] = {
 	"#version 330 core																				\n"
-	"																								\n"	
+	"																								\n"
 	"in vec2 f_texCoords;																			\n"
 	"																								\n"
 	"uniform sampler2D sampler;																		\n"
@@ -82,8 +77,12 @@ const GLchar* FRAGMENT_SHADER_SOURCE[] = {
 	"out vec4 fragColor;																			\n"
 	"																								\n"
 	"void main()																					\n"
-	"{																								\n"	
-	"	fragColor = texture(sampler, f_texCoords);													\n"
+	"{																								\n"
+	"	vec4 sampledColor = texture(sampler, f_texCoords);											\n"
+	"	if(sampledColor.r == 0)																		\n"
+	"		fragColor = vec4(0.0, 0.8, 0.8, 1.0);													\n"
+	"	else																						\n"
+	"		fragColor = sampledColor;																\n"
 	"}																								\n"
 };
 
@@ -98,29 +97,36 @@ const GLchar* FRAGMENT_SHADER_SOURCE[] = {
 //Уста десно		54
 //Брада				8
 
+// MALE
+//const cv::Point3f modelPointsArr[] =
+//{
+//	cv::Point3f(-1.13642, -0.90731, +0.00391),
+//	cv::Point3f(-0.48241, -0.83527, -0.05782),
+//	cv::Point3f(+1.13642, -0.90731, +0.00391),
+//	cv::Point3f(+0.48241, -0.83527, -0.05782),
+//	cv::Point3f(-0.44994, +0.07104, -0.46759),
+//	cv::Point3f(+0.44994, +0.07104, -0.46759),
+//	cv::Point3f(-0.63738, +0.81876, -0.25444),
+//	cv::Point3f(+0.63738, +0.81876, -0.25444),
+//	cv::Point3f(-0.00005, +1.85261, -0.27220)
+//};
+
+// FEMALE
 const cv::Point3f modelPointsArr[] =
 {
-	cv::Point3f(-1.13642, -0.90731, +0.00391),
-	cv::Point3f(-0.48241, -0.83527, -0.05782),
-	cv::Point3f(+1.13642, -0.90731, +0.00391),
-	cv::Point3f(+0.48241, -0.83527, -0.05782),
-	cv::Point3f(-0.44994, +0.07104, -0.46759),
-	cv::Point3f(+0.44994, +0.07104, -0.46759),
-	cv::Point3f(-0.63738, +0.81876, -0.25444),
-	cv::Point3f(+0.63738, +0.81876, -0.25444),
-	cv::Point3f(-0.00005, +1.85261, -0.27220)
+	cv::Point3f(-1.030300, -0.41930, -0.38129),
+	cv::Point3f(-0.493680, -0.38700, -0.55059),
+	cv::Point3f(+1.030300, -0.41930, -0.38129),
+	cv::Point3f(+0.493680, -0.38700, -0.55059),
+	cv::Point3f(-0.363830, +0.52565, -0.79787),
+	cv::Point3f(+0.363830, +0.52565, -0.79787),
+	cv::Point3f(-0.599530, +1.10768, -0.71667),
+	cv::Point3f(+0.599530, +1.10768, -0.71667),
+	cv::Point3f(-0.000002, +1.99444, -0.94946)
 };
 
-glm::mat4 getRotation(cv::Mat& img, const std::vector<cv::Point2f>& srcImagePoints,
-	const std::vector<cv::Point3f>& modelPoints);
-
-void getEulerAngles(
-	const std::vector<cv::Point2f>& srcImagePoints,
-	const std::vector<cv::Point3f>& modelPoints,
-	const cv::Mat& srcImage,
-	glm::mat3& rotationMatrix,
-	glm::vec3& translationVector
-	);
+void getEulerAngles(const std::vector<cv::Point2f>& srcImagePoints, const std::vector<cv::Point3f>& modelPoints,
+	const cv::Mat& srcImage, glm::mat3& rotationMatrix, glm::vec3& translationVector);
 
 // ==================================================
 //	MAIN
@@ -143,6 +149,7 @@ int main(int argc, char** argv)
 	glEnable(GL_DEPTH_TEST);
 	glFrontFace(GL_CCW);
 	glCullFace(GL_BACK);
+	glEnable(GL_CULL_FACE);	
 
 	GLuint vertexShader;
 	GLuint fragmentShader;
@@ -179,7 +186,7 @@ int main(int argc, char** argv)
 	glDeleteShader(vertexShader);
 	glDeleteShader(fragmentShader);
 
-	IndexedModel mesh = OBJModel("./res/face.obj").ToIndexedModel();
+	IndexedModel mesh = OBJModel("./res/female_face.obj").ToIndexedModel();
 	mesh.CalcNormals();
 	GLuint numVertices = mesh.positions.size();
 	GLuint numIndices = mesh.indices.size();
@@ -219,7 +226,7 @@ int main(int argc, char** argv)
 	std::vector<dlib::full_object_detection> shapes;
 	dlib::full_object_detection shape;
 
-	srcImageCV = cv::imread("face1.jpg");
+	srcImageCV = cv::imread("face2.jpg");
 	dlib::assign_image(srcImageDLIB, dlib::cv_image<dlib::bgr_pixel>(srcImageCV));
 	dets = detector(srcImageDLIB);
 	shape = sp(srcImageDLIB, dets[0]);
@@ -251,51 +258,27 @@ int main(int argc, char** argv)
 			rotationMatrix[2][0], rotationMatrix[2][1], rotationMatrix[2][2], 0,
 			0,					  0,					0,					  1
 		);	
-	std::cout << glm::to_string(translationVector) << std::endl;
+	// std::cout << glm::to_string(translationVector) << std::endl;
 	
 	GLuint srcImageTexture;
-	if (srcImageCV.empty())
-	{
-		std::cout << "image empty" << std::endl;
-	}
-	else
-	{
-		cv::flip(srcImageCV, srcImageCV, 0);
-		glGenTextures(1, &srcImageTexture);
-		glBindTexture(GL_TEXTURE_2D, srcImageTexture);
-
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);		
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, srcImageCV.cols, srcImageCV.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, srcImageCV.ptr());
-
-		glGenerateMipmap(GL_TEXTURE_2D);
-	}
+	cv::flip(srcImageCV, srcImageCV, 0);
+	glGenTextures(1, &srcImageTexture);
+	glBindTexture(GL_TEXTURE_2D, srcImageTexture);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);		
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, srcImageCV.cols, srcImageCV.rows, 0, GL_BGR, GL_UNSIGNED_BYTE, srcImageCV.ptr());
+	glGenerateMipmap(GL_TEXTURE_2D);
+	glBindTexture(GL_TEXTURE_2D, 0);	
 	
-	float angle = 0.0f;
 	SDL_Event e;
 	boolean run = true;
 	while (run)
 	{		
 		SDL_PollEvent(&e);
 		if (e.type == SDL_QUIT)
-			run = false;
-		if (e.type == SDL_KEYDOWN)
-		{
-			switch (e.key.keysym.sym)
-			{
-			case SDLK_LEFT:
-				angle -= 0.1f;
-				break;
-			case SDLK_RIGHT:
-				angle += 0.1f;
-				break;
-			default:
-				break;
-			}
-		}		
+			run = false;		
 		
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -304,8 +287,7 @@ int main(int argc, char** argv)
 		glProgramUniformMatrix4fv(program, uMLocation, 1, false, glm::value_ptr(model));
 				
 		glBindTexture(GL_TEXTURE_2D, 0);		
-		glBindVertexArray(faceVAO);		
-		glLineWidth(2);		
+		glBindVertexArray(faceVAO);				
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glDrawElements(GL_TRIANGLES, numIndices, GL_UNSIGNED_INT, 0);
 		glBindVertexArray(0);
