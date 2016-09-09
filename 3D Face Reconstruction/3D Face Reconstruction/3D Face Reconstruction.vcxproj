@@ -82,9 +82,13 @@
     <ClCompile Include="include\dlib\all\Source.cpp" />
     <ClCompile Include="Main.cpp" />
     <ClCompile Include="OBJLoader.cpp" />
+    <ClCompile Include="Rpoly.cpp" />
+    <ClCompile Include="RPP.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="OBJLoader.h" />
+    <ClInclude Include="Rpoly.h" />
+    <ClInclude Include="RPP.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
