@@ -125,7 +125,7 @@ const cv::Point3f modelPointsArr[] =
 	cv::Point3f(-0.000002, +1.99444, -0.94946)
 };
 
-void getEulerAngles(const std::vector<cv::Point2f>& srcImagePoints, const std::vector<cv::Point3f>& modelPoints,
+void getTransformationParameters(const std::vector<cv::Point2f>& srcImagePoints, const std::vector<cv::Point3f>& modelPoints,
 	const cv::Mat& srcImage, glm::mat3& rotationMatrix, glm::vec3& translationVector);
 
 // ==================================================
@@ -226,7 +226,7 @@ int main(int argc, char** argv)
 	std::vector<dlib::full_object_detection> shapes;
 	dlib::full_object_detection shape;
 
-	srcImageCV = cv::imread("face2.jpg");
+	srcImageCV = cv::imread("./res/face1.jpg");	
 	dlib::assign_image(srcImageDLIB, dlib::cv_image<dlib::bgr_pixel>(srcImageCV));
 	dets = detector(srcImageDLIB);
 	shape = sp(srcImageDLIB, dets[0]);
@@ -241,7 +241,7 @@ int main(int argc, char** argv)
 	i = 48; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
 	i = 54; srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
 	i = 8;	srcImagePoints.push_back(cv::Point2f(shape.part(i).x(), shape.part(i).y()));
-	shapes.push_back(shape);
+	shapes.push_back(shape);	
 	
 	win.clear_overlay();
 	win.set_image(srcImageDLIB);
@@ -249,7 +249,7 @@ int main(int argc, char** argv)
 		
 	glm::mat3 rotationMatrix;
 	glm::vec3 translationVector;
-	getEulerAngles(srcImagePoints, modelPoints, srcImageCV, rotationMatrix, translationVector);
+	getTransformationParameters(srcImagePoints, modelPoints, srcImageCV, rotationMatrix, translationVector);
 	glm::mat4 translationMatrix = glm::translate(translationVector);
 	model = translationMatrix * 
 		glm::mat4(
@@ -274,17 +274,34 @@ int main(int argc, char** argv)
 	
 	SDL_Event e;
 	boolean run = true;
+	float angle = 0.0f;
 	while (run)
 	{		
 		SDL_PollEvent(&e);
 		if (e.type == SDL_QUIT)
-			run = false;		
+			run = false;	
+
+		if (e.type == SDL_KEYDOWN)
+		{			
+			switch (e.key.keysym.sym)
+			{
+			case SDLK_LEFT:
+				angle -= 0.01;
+				break;
+			case SDLK_RIGHT:
+				angle += 0.01;
+				break;
+			default:
+				break;
+			}
+		}
+		glm::mat4 r = glm::rotate(angle, glm::vec3(0, -1, 0));		
 		
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glUseProgram(program);
 		glProgramUniformMatrix4fv(program, uVPLocation, 1, false, glm::value_ptr(viewProjection));
-		glProgramUniformMatrix4fv(program, uMLocation, 1, false, glm::value_ptr(model));
+		glProgramUniformMatrix4fv(program, uMLocation, 1, false, glm::value_ptr(model * r));
 				
 		glBindTexture(GL_TEXTURE_2D, 0);		
 		glBindVertexArray(faceVAO);				
@@ -313,7 +330,7 @@ int main(int argc, char** argv)
 }
 
 // http://www.morethantechnical.com/2012/10/17/head-pose-estimation-with-opencv-opengl-revisited-w-code/
-void getEulerAngles(
+void getTransformationParameters(
 	const std::vector<cv::Point2f>& srcImagePoints,
 	const std::vector<cv::Point3f>& modelPoints,
 	const cv::Mat& srcImage,
