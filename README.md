@@ -1,5 +1,5 @@
 # 3D Face Reconstruction
-3D recreation of detected face. dlib and OpenCV libraries are used for face detection and image manipulation. OpenGL is used for rendering.
+3D reconstruction of detected face. dlib and OpenCV libraries are used for face detection and image manipulation. OpenGL is used for rendering.
 
 ## Reference materials
 - [Head pose]
