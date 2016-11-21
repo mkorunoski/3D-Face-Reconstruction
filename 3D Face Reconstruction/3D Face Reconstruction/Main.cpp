@@ -226,7 +226,7 @@ int main(int argc, char** argv)
 	std::vector<dlib::full_object_detection> shapes;
 	dlib::full_object_detection shape;
 
-	srcImageCV = cv::imread("./res/face1.jpg");	
+	srcImageCV = cv::imread("./res/face3.jpg");	
 	dlib::assign_image(srcImageDLIB, dlib::cv_image<dlib::bgr_pixel>(srcImageCV));
 	dets = detector(srcImageDLIB);
 	shape = sp(srcImageDLIB, dets[0]);
