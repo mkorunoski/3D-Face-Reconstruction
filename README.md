@@ -11,13 +11,17 @@
 
 ## Screenshots
 - Face detection
-![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/face.jpg)
+
+⋅⋅⋅![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/face.jpg)
 
 - Feature points extraction
-![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/fp2d.jpg)
+
+⋅⋅⋅![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/fp2d.jpg)
 
 - Face model for mapping
-![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/fp3d.jpg)
+
+⋅⋅⋅![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/fp3d.jpg)
 
 - Final result
-![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/res.jpg)
+
+⋅⋅⋅![Image Title](https://github.com/mkorunoski/3D-Face-Reconstruction/blob/master/res.jpg)
